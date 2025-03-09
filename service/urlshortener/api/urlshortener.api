@@ -1,0 +1,35 @@
+syntax = "v1"
+
+info (
+	title:  "urlshortener-api"
+	desc:   "urlshortener-api"
+	author: "Hao Jiang"
+	email:  "joshtrick@outlook.com"
+)
+
+type (
+	ConvertReq {
+		LongUrl string `json:"long_url" validate:"required"`
+	}
+	ConvertResp {
+		ShortUrl string `json:"short_url"`
+	}
+)
+
+type (
+	ShowReq {
+		ShortUrl string `path:"short_url" validate:"required"`
+	}
+	ShowResp {
+		LongUrl string `json:"long_url"`
+	}
+)
+
+service urlshortener-api {
+	@handler Convert
+	post /convert (ConvertReq) returns (ConvertResp)
+
+	@handler Show
+	get /:short_url (ShowReq) returns (ShowResp)
+}
+

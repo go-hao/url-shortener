@@ -1,0 +1,14 @@
+services:
+  redis:
+    image: redis:7.2.5
+    restart: always
+    ports: # Host:Container
+      - 6379:6379
+    volumes: # Host:Container
+      - ./docker-redis/data:/data
+    environment:
+      REDIS_PASSWORD: letmein
+    command:
+      - /bin/sh
+      - -c
+      - "redis-server --requirepass $$REDIS_PASSWORD"

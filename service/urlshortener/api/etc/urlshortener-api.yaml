@@ -1,0 +1,14 @@
+Name: urlshortener-api
+Host: 0.0.0.0
+Port: 8888
+UrlMapCacheRedis:
+  - Host: 127.0.0.1:6379
+    Pass: letmein
+UrlMapSql:
+  Dsn: "user:letmein@tcp(127.0.0.1:3306)/db?charset=utf8mb4&parseTime=true&loc=Asia%2FShanghai"
+SequenceSql:
+  Dsn: "user:letmein@tcp(127.0.0.1:3306)/db?charset=utf8mb4&parseTime=true&loc=Asia%2FShanghai"
+ShortUrlBlackList: ["version", "fuck", "stupid", "convert", "health", "api", "css", "js"]
+ShortUrlDomain: example.com
+Base62:
+  Seed62: "0mnop189GHIJKLQRSTUVWXYZOPefghijklABCDEFabcdMNqrstu234567vwxyz"

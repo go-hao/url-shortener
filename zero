@@ -1,0 +1,434 @@
+#!/usr/bin/python3
+
+import os, sys
+import subprocess
+import signal
+import datetime
+
+def main():
+    # ############################################################# #
+    # Change variables below for your own                           #
+    # ############################################################# #
+
+    # Project repo address and repo namespace
+    # The project module name will be: [repo_addr/][repo_name/]project_name
+    # Comment it out or leave it blank to unset a variable
+    repo_addr = 'github.com'
+    repo_name = 'go-hao'
+
+    # Project name
+    # Leave it blank for default value (Root folder name of the project)
+    project_name = ''
+
+    # Proxy address for GOPROXY
+    # Do not add https:// or http:// in front of the address
+    # Leave it blank for default value (proxy.golang.org)
+    proxy_addr = 'goproxy.cn'
+
+    # ############################################################# #
+    # Do not touch codes below                                      #
+    # ############################################################# #
+    def signal_handler(sig, frame):
+        sys.exit(0)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Auto set variables
+    current_path = os.getcwd()
+    project_path = os.path.dirname(os.path.realpath(__file__))
+    if project_path != current_path:
+        error('only available from {}'.format(project_path))
+        return
+
+    if project_name == '':
+        project_name = os.path.basename(project_path)
+
+    module_name = project_name
+    if repo_name != '':
+        module_name = repo_name + '/' + module_name
+
+    if repo_addr != '':
+        module_name = repo_addr + '/' + module_name
+
+    goproxy_env = 'https://proxy.golang.org,direct'
+    if proxy_addr != '':
+        goproxy_env = 'https://' + proxy_addr + ',direct'
+
+    # Define project folder names
+    build_dir = 'build'
+    docker_root_dir = 'docker'
+    service_root_dir = 'service'
+    sql_dir = 'sql'
+    model_dir = 'model'
+    api_dir = 'api'
+    rpc_dir = 'rpc'
+
+    ignore_suffix = '.skip'
+
+
+    # Define app types
+    api = {
+        'tag': 'api',
+        'file': '.api',
+        'dir': api_dir,
+    }
+
+    rpc = {
+        'tag': 'rpc',
+        'file': '.proto',
+        'dir': rpc_dir,
+    }
+
+    # Collect paths
+    build_path = build_dir
+    docker_root_path = docker_root_dir
+    service_root_path = service_root_dir
+    docker_paths = get_sub_paths(root_path=docker_root_path)
+    service_paths = get_sub_paths(root_path=service_root_path)
+    api_app_paths = get_app_paths(service_paths=service_paths, app_type=api)
+    rpc_app_paths = get_app_paths(service_paths=service_paths, app_type=rpc)
+
+
+    # Define operations
+    ops_help = {
+        'set':                     ['set go environment variables - GO111MODULE(on) and GOPROXY'],
+        'init':                    ['initialize the project'],
+        'tidy':                    ['tidy and format the project'],
+        'clean':                   ['clean build content'],
+        'api <NAME>':              ['create an api app in {}/NAME/{}'.format(service_root_path, api_dir)],
+        'rpc <NAME>':              ['create a rpc app in {}/NAME/{}'.format(service_root_path, rpc_dir)],
+        '<MODEL OP> <PATH>':       ['generate app models based on sql files in PATH/{}'.format(sql_dir),
+                                    '  - PATH      - {}/NAME'.format(service_root_path),
+                                    '  - MODEL OP  - model generate app models with no cache',
+                                    '                modelc generate app models with cache',
+                                    ],
+        'gen <PATH>':              ['generate or update app code',
+                                    '  - PATH      - {}/NAME/OPT'.format(service_root_path),
+                                    '  - OPT       - {}|{}'.format(api['tag'], rpc['tag']),
+                                    ],
+        'build [PATH]':            ['build app', 
+                                    '  - PATH      - {}/NAME/OPT'.format(service_root_path),
+                                    '                omit to build all apps',
+                                    '  - OPT       - {}|{}'.format(api['tag'], rpc['tag']),
+                                    ],
+        'run <PATH>':              ['run app',
+                                    '  - PATH      - {}/NAME/OPT'.format(service_root_path),
+                                    '  - OPT       - {}|{}'.format(api['tag'], rpc['tag']),
+                                    ],
+        '<DOCKER OP> [PATH]':      ['shortcut of docker compose to manage docker service in {}'.format(docker_root_path), 
+                                    '  - PATH      - {}/NAME'.format(docker_root_path),
+                                    '                omit to manage all services',
+                                    '  - DOCKER OP - up   start the service',
+                                    '                down stop the service',
+                                    '                ps   show status of the service',
+                                    '                logs show logs of the service',
+                                    ],
+    }
+    ops = {
+        'set',
+        'init',
+        'tidy',
+        'clean',
+        'api',
+        'rpc',
+        'model',
+        'modelc',
+        'gen',
+        'build',
+        'run',
+        'up',
+        'down',
+        'ps',
+        'logs',
+    }
+
+    op = '' if len(sys.argv) <= 1 else sys.argv[1]
+    target = '' if len(sys.argv) <= 2 else sys.argv[2]
+    if len(sys.argv) > 2 and op not in ops:
+        op_holder = op
+        op = target
+        target = op_holder
+
+    if op == 'set':
+        set(goproxy_env=goproxy_env)
+    elif op == 'init':
+        init(module_name=module_name)
+    elif op == 'tidy':
+        tidy()
+    elif op == 'clean':
+        clean(build_path=build_path)
+    elif op == 'api':
+        new_app(service_root_path=service_root_path, app_type=api, service_name=target)
+    elif op == 'rpc':
+        new_app(service_root_path=service_root_path, app_type=rpc, service_name=target)
+    elif op in ('model', 'modelc'):
+        new_model(
+            service_paths=service_paths,
+            service_path=target,
+            sql_dir=sql_dir,
+            model_dir=model_dir,
+            op=op,
+        )
+    elif op == 'gen':
+        gen(
+            api_app_paths=api_app_paths,
+            rpc_app_paths=rpc_app_paths,
+            app_path=target,
+        )
+    elif op == 'build':
+        ret = tidy()
+        if ret == -1:
+            return
+        build(
+            api_app_paths=api_app_paths,
+            rpc_app_paths=rpc_app_paths,
+            build_path=build_path,
+            app_path=target,
+        )
+    elif op == 'run':
+        ret = tidy()
+        if ret == -1:
+            return
+        ret = build(
+            api_app_paths=api_app_paths,
+            rpc_app_paths=rpc_app_paths,
+            build_path=build_path,
+            app_path=target,
+        )
+        if ret == -1:
+            return
+        run(
+            api_app_paths=api_app_paths,
+            rpc_app_paths=rpc_app_paths,
+            build_path=build_path,
+            app_path=target,
+        )
+    elif op in ('up', 'down', 'ps', 'logs'):
+        docker(docker_paths=docker_paths, op=op, docker_path=target, ignore_suffix=ignore_suffix)
+    else:
+        help(ops_help=ops_help)
+
+# ############################################################# #
+# Functions                                                     #
+# ############################################################# #
+
+def get_sub_paths(root_path):
+    if not os.path.isdir(root_path):
+        return []
+    return [os.path.join(root_path, d) for d in os.listdir(root_path) if os.path.isdir(os.path.join(root_path, d))]
+
+
+def get_app_paths(service_paths, app_type):
+    app_paths = []
+    for p in service_paths:
+        app_path = os.path.join(p, app_type['dir'])
+        if os.path.isdir(app_path):
+            app_paths.append(app_path)
+    return app_paths
+
+
+def cmd_run(cmd, cwd=''):
+    info('[./{}] {}'.format(cwd, cmd))
+    cmd_list = cmd.split()
+    if cwd == '':
+        sp = subprocess.run(cmd_list)
+    else:
+        sp = subprocess.run(cmd_list, cwd=cwd)
+    return sp.returncode
+
+
+def clean_path(path):
+    if path == '':
+        return path
+
+    mod_path = path
+    if path[-1] == '/':
+        mod_path = path[:-1]
+    elif path[0] == '.' or path[0] == '/':
+        mod_path = path[1:]
+    else:
+        return mod_path
+
+    return clean_path(mod_path)
+
+
+def error(msg):
+    print('[e] [{}] {}'.format(datetime.datetime.now().strftime('%H:%M:%S'), msg))
+    return -1
+
+def info(msg, cwd=''):
+    print('[i] [{}] {}'.format(datetime.datetime.now().strftime('%H:%M:%S'), msg))
+
+
+# ############################################################# #
+# Functions - op                                                #
+# ############################################################# #
+
+def help(ops_help):
+    length = max([len(k) for k in ops_help])
+    print('Usage: ./{} <option>'.format(os.path.basename(sys.argv[0])))
+    print('Options:')
+    space = ' '
+    for k in ops_help:
+        space_num = length - len(k)
+        print((space * 2) + k + (space * space_num) + '\t' + ops_help[k][0])
+        if len(ops_help[k]) > 1:
+            for v in ops_help[k][1:]:
+                print((space * 2) + (space * length) + '\t' + v) 
+
+
+def set(goproxy_env):
+    cmd = 'go env -w GO111MODULE=on'
+    cmd_run(cmd)
+    cmd = 'go env -w GOPROXY={}'.format(goproxy_env)
+    cmd_run(cmd)
+
+
+def init(module_name):
+    if os.path.isfile('go.mod'):
+        return error('go.mod already exists')
+
+    cmd = 'go mod init {}'.format(module_name)
+    ret = cmd_run(cmd)
+
+
+def tidy():
+    cmd = 'go mod tidy -v'
+    ret = cmd_run(cmd)
+    if ret != 0:
+        return -1
+    cmd = 'go fmt ./...'
+    ret = cmd_run(cmd)
+    if ret != 0:
+        return -1
+
+
+def clean(build_path):
+    cmd = 'rm -rf {}'.format(build_path)
+    ret = cmd_run(cmd)
+
+
+def new_app(service_root_path, app_type, service_name):
+    service_path = os.path.join(service_root_path, service_name)
+    app_path = os.path.join(service_path, app_type['dir'])
+    app_file = '{}{}'.format(service_name, app_type['file'])
+    app_file_path = os.path.join(app_path, app_file)
+
+    if service_name == '':
+        return error('service name not provided')
+
+    if os.path.isfile(app_file_path):
+        return error('{} already exists'.format(app_file_path))
+    
+    cmd = 'mkdir -p {}'.format(app_path)
+    ret = cmd_run(cmd)
+    if ret != 0:
+        return -1
+    cmd = 'goctl {} -o {}'.format(app_type['tag'], app_file_path)
+    ret = cmd_run(cmd)
+
+
+def new_model(service_paths, service_path, sql_dir, model_dir, op):
+    cleaned_service_path = clean_path(service_path)
+    sql_path = os.path.join(cleaned_service_path, sql_dir)
+    model_path = os.path.join(cleaned_service_path, model_dir)
+
+    if cleaned_service_path not in service_paths:
+        return error('undefined service: {}'.format(cleaned_service_path))
+
+    if not os.path.isdir(sql_path):
+        return error('undefined sql directory: {}'.format(sql_path))
+
+    cmd = 'mkdir -p {}'.format(model_path)
+    ret = cmd_run(cmd)
+    if ret != 0:
+        return -1
+    if op == 'modelc':
+        cmd = 'goctl model mysql ddl -src={}/*.sql -dir={}c -c'.format(sql_path, model_path)
+    else:
+        cmd = 'goctl model mysql ddl -src={}/*.sql -dir={}'.format(sql_path, model_path)
+    ret = cmd_run(cmd)
+
+
+def gen(api_app_paths, rpc_app_paths, app_path):
+    cleaned_app_path = clean_path(app_path)
+
+    if cleaned_app_path in api_app_paths:
+        service_name = os.path.basename(os.path.dirname(cleaned_app_path))
+        cmd = 'goctl api go -api {}/{}.api -dir {}'.format(cleaned_app_path, service_name, cleaned_app_path)
+        ret = cmd_run(cmd)
+    elif cleaned_app_path in rpc_app_paths:
+        service_name = os.path.basename(os.path.dirname(cleaned_app_path))
+        cmd = 'goctl rpc protoc {0}/{1}.proto --go_out={0} --go-grpc_out={0} --zrpc_out={0}'.format(
+            cleaned_app_path,
+            service_name,
+        )
+        ret = cmd_run(cmd)
+    else:
+        return error('undefined app: {}'.format(cleaned_app_path))
+
+
+def build(api_app_paths, rpc_app_paths, build_path, app_path):
+    cleaned_app_path = clean_path(app_path)
+    app_paths = []
+    if cleaned_app_path in api_app_paths or cleaned_app_path in rpc_app_paths:
+        app_paths.append(cleaned_app_path)
+    elif cleaned_app_path == '':
+        app_paths = api_app_paths.copy()
+        app_paths.extend(rpc_app_paths)
+    else:
+        return error('undefined app: {}'.format(cleaned_app_path))
+
+    for p in app_paths:
+        service_name = os.path.basename(os.path.dirname(p))
+        app_type = os.path.basename(p)
+        cmd = 'go build -v -o ./{} ./{}'.format(
+            os.path.join(build_path, service_name, app_type, service_name),
+            p,
+        )
+        ret = cmd_run(cmd)
+        cmd = 'cp -r ./{} ./{}'.format(
+            os.path.join(p, 'etc'),
+            os.path.join(build_path, service_name, app_type),
+        )
+        ret = cmd_run(cmd)
+
+
+def run(api_app_paths, rpc_app_paths, build_path, app_path):
+    cleaned_app_path = clean_path(app_path)
+
+    if cleaned_app_path in api_app_paths or cleaned_app_path in rpc_app_paths:
+        service_name = os.path.basename(os.path.dirname(cleaned_app_path))
+        app_type = os.path.basename(cleaned_app_path) 
+
+        cmd = './{}'.format(service_name)
+        cwd = os.path.join(build_path, service_name, app_type)
+        ret = cmd_run(cmd, cwd=cwd)
+    else:
+        return error('undefined app: {}'.format(cleaned_app_path))
+
+def docker(docker_paths, op, docker_path, ignore_suffix):
+    cleaned_docker_path = clean_path(docker_path)
+    docker_services = []
+    if cleaned_docker_path in docker_paths:
+        docker_services.append(cleaned_docker_path)
+    elif cleaned_docker_path == '':
+        docker_services = docker_paths.copy()
+    else:
+        return error('undefined docker service: {}'.format(cleaned_docker_path))
+    
+    cmd = ''
+    if op == 'up':
+        cmd = 'docker compose up -d'
+    elif op == 'down':
+        cmd = 'docker compose down'
+    elif op == 'ps':
+        cmd = 'docker compose ps -a'
+    elif op == 'logs':
+        cmd = 'docker compose logs'
+    
+    for s in docker_services:
+        if not s.endswith(ignore_suffix):
+            ret = cmd_run(cmd, cwd=s)
+
+if __name__ == '__main__':
+    main()

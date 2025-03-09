@@ -1,0 +1,13 @@
+services:
+  mysql:
+    image: mysql:8.4.0
+    restart: always
+    ports: # Host:Container
+      - 3306:3306
+    volumes: # Host:Container
+      - ./docker-mysql/mysql:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: db
+      MYSQL_ROOT_PASSWORD: letmein
+      MYSQL_USER: user
+      MYSQL_PASSWORD: letmein

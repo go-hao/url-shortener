@@ -1,0 +1,17 @@
+services:
+  emqx:
+    image: emqx/emqx:5.8.4
+    restart: always
+    environment:
+      EMQX_DASHBOARD__DEFAULT_USERNAME: admin
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: letmein
+    ports: # Host:Container
+      - 18083:18083 # Dashboard
+      - 1883:1883 # TCP
+      - 8883:8883 # SSL
+      - 8083:8083 # Websocket listener
+      - 8084:8084 # Secure websocket listener
+    volumes: # Host:Container
+      # - ./docker-emqx/etc:/opt/emqx/etc
+      - ./docker-emqx/data:/opt/emqx/data
+      - ./docker-emqx/log:/opt/emqx/log
