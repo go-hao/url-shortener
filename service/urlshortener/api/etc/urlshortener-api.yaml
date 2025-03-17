@@ -12,3 +12,6 @@ ShortUrlBlackList: ["version", "fuck", "stupid", "convert", "health", "api", "cs
 ShortUrlDomain: example.com
 Base62:
   Seed62: "0mnop189GHIJKLQRSTUVWXYZOPefghijklABCDEFabcdMNqrstu234567vwxyz"
+BloomRedis:
+  Host: 127.0.0.1:6379
+  Pass: letmein

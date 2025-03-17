@@ -26,6 +26,15 @@ func NewShowLogic(ctx context.Context, svcCtx *svc.ServiceContext) *ShowLogic {
 }
 
 func (l *ShowLogic) Show(req *types.ShowReq) (resp *types.ShowResp, err error) {
+	exists, err := l.svcCtx.Filter.ExistsCtx(l.ctx, []byte(req.ShortUrl))
+	if err != nil {
+		l.Logger.Errorf("Filter.ExistsCtx: %s", err.Error())
+		return nil, xerrors.New(1002, "internal error")
+	}
+	if !exists {
+		return nil, xerrors.New(404, "not found")
+	}
+
 	u, err := l.svcCtx.UrlMapModel.FindOneByShortUrl(l.ctx, req.ShortUrl)
 	if err != nil && err != model.ErrNotFound {
 		l.Logger.Errorf("UrlMapModel.FindOneByShortUrl: %s", err.Error())

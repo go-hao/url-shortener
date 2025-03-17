@@ -3,6 +3,7 @@ package config
 import (
 	"github.com/go-hao/url-shortener/pkg/base62"
 	"github.com/zeromicro/go-zero/core/stores/cache"
+	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/rest"
 )
 
@@ -22,4 +23,6 @@ type Config struct {
 
 	ShortUrlBlackList []string
 	ShortUrlDomain    string
+
+	BloomRedis redis.RedisConf
 }

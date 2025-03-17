@@ -31,11 +31,13 @@ func NewConvertLogic(ctx context.Context, svcCtx *svc.ServiceContext) *ConvertLo
 }
 
 func (l *ConvertLogic) Convert(req *types.ConvertReq) (resp *types.ConvertResp, err error) {
+	// check if url is valid
 	if ok := connect.Ping(req.LongUrl); !ok {
 		return nil, xerrors.New(1001, "invalid url")
 	}
 	longUrlMd5 := md5.Sum(req.LongUrl)
 
+	// check if url already exists
 	_, err = l.svcCtx.UrlMapModel.FindOneByLongUrlMd5(l.ctx, longUrlMd5)
 	if err != nil && err != model.ErrNotFound {
 		l.Logger.Errorf("UrlMapModel.FindOneByLongUrlMd5: %s", err.Error())
@@ -45,11 +47,13 @@ func (l *ConvertLogic) Convert(req *types.ConvertReq) (resp *types.ConvertResp, 
 		return nil, xerrors.New(1003, "already exists")
 	}
 
+	// verify url
 	goodUrl, err := url.Parse(req.LongUrl)
 	if err != nil {
 		return nil, xerrors.New(1001, "invalid url")
 	}
 
+	// check if it is a shortUrl
 	baseUrl := path.Base(goodUrl.Path)
 	_, err = l.svcCtx.UrlMapModel.FindOneByShortUrl(l.ctx, baseUrl)
 	if err != nil && err != model.ErrNotFound {
@@ -60,6 +64,7 @@ func (l *ConvertLogic) Convert(req *types.ConvertReq) (resp *types.ConvertResp, 
 		return nil, xerrors.New(1003, "already exists")
 	}
 
+	// get shortUrl
 	var shortUrl string
 	for {
 		id, err := l.svcCtx.SequenceModel.Next(l.ctx)
@@ -75,6 +80,7 @@ func (l *ConvertLogic) Convert(req *types.ConvertReq) (resp *types.ConvertResp, 
 		}
 	}
 
+	// store to sql
 	_, err = l.svcCtx.UrlMapModel.Insert(l.ctx, &modelc.UrlMap{
 		LongUrl:    req.LongUrl,
 		LongUrlMd5: longUrlMd5,
@@ -82,6 +88,13 @@ func (l *ConvertLogic) Convert(req *types.ConvertReq) (resp *types.ConvertResp, 
 	})
 	if err != nil {
 		l.Logger.Errorf("UrlMapModel.Insert: %s", err.Error())
+		return nil, xerrors.New(1002, "internal error")
+	}
+
+	// add shortUrl to bloom filter
+	err = l.svcCtx.Filter.AddCtx(l.ctx, []byte(shortUrl))
+	if err != nil {
+		l.Logger.Errorf("Filter.AddCtx: %s", err.Error())
 		return nil, xerrors.New(1002, "internal error")
 	}
 
