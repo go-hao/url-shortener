@@ -3,7 +3,7 @@ module github.com/go-hao/url-shortener
 go 1.23.6
 
 require (
-	github.com/go-hao/zero v0.0.6
+	github.com/go-hao/zero v0.0.7
 	github.com/zeromicro/go-zero v1.8.1
 )
 

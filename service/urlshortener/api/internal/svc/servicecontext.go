@@ -11,7 +11,8 @@ import (
 )
 
 type ServiceContext struct {
-	Config config.Config
+	Config       config.Config
+	ErrBadReqest any
 
 	UrlMapModel   modelc.UrlMapModel
 	SequenceModel model.SequenceModel
@@ -35,7 +36,8 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	base62 := base62.MustNew(c.Base62)
 
 	return &ServiceContext{
-		Config: c,
+		Config:       c,
+		ErrBadReqest: nil,
 
 		UrlMapModel:   modelc.NewUrlMapModel(urlMapConn, c.UrlMapCacheRedis),
 		SequenceModel: model.NewSequenceModel(sequenceConn),
